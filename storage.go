@@ -7,7 +7,7 @@ import (
 	"log"
 
 	// outer
-	_ "github.cim/lib/pq" //psql driver
+	_ "github.com/lib/pq" //psql driver
 )
 
 type PsqlStorage struct {
@@ -63,7 +63,8 @@ func (p *PsqlStorage) CreateAccount(acc *Account) error {
 }
 
 func (p *PsqlStorage) DeleteAccount(id int) error {
-	return nil
+	_, err := p.db.Query("delete from account where id = $1", id)
+	return err
 }
 
 func (p *PsqlStorage) UpdateAccount(acc *Account) error {
@@ -71,36 +72,42 @@ func (p *PsqlStorage) UpdateAccount(acc *Account) error {
 }
 
 func (p *PsqlStorage) GetAccountByID(id int) (*Account, error) {
-	rows,err:=p.db.Query(`select * from Accounts where id = $1`,id)
-	if err!=nil{
-		return nil,err
+	rows, err := p.db.Query(`select * from Accounts where id = $1`, id)
+	if err != nil {
+		return nil, err
 	}
-	d:=&Account{}
-	err=rows.Scan(&d.ID,&d.Firstname,&d.Lastname,&d.Number,&d.Balance,&d.CreatedAt)
-	if err!=nil{
-		return nil,err
+
+	for rows.Next() {
+		return scanRowsIntoAccount(rows)
 	}
-		
-	return d, nil
+
+	return nil, fmt.Errorf("Account with id %d not found", id)
 }
 
-func (p *PsqlStorage) GetAccounts() ([]*Account,error){
+func (p *PsqlStorage) GetAccounts() ([]*Account, error) {
 	var accs []*Account
-	rows,err:=p.db.Query(`select * from Accounts`)
-	if err!=nil{
-		return accs,err
+	rows, err := p.db.Query(`select * from Accounts`)
+	if err != nil {
+		return accs, err
 	}
 
-	for rows.Next(){
-		d:=&Account{}
-		err:=rows.Scan(&d.ID,&d.Firstname,&d.Lastname,&d.Number,&d.Balance,&d.CreatedAt)
-		if err!=nil{
-			return accs,err
+	for rows.Next() {
+
+		d, err := scanRowsIntoAccount(rows)
+		if err != nil {
+			return accs, err
 		}
-		if err:=rows.Err();err!=nil{
-			return accs,err
+		if err := rows.Err(); err != nil {
+			return accs, err
 		}
-		accs = append(accs,d)
+		accs = append(accs, d)
 	}
-	return accs,nil
+	return accs, nil
+}
+
+func scanRowsIntoAccount(row *sql.Rows) (*Account, error) {
+	d := &Account{}
+	err := row.Scan(&d.ID, &d.Firstname, &d.Lastname, &d.Number, &d.Balance, &d.CreatedAt)
+
+	return d, err
 }

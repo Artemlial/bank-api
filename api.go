@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	// "net/url"
+	"strconv"
 	"time"
 )
 
@@ -14,7 +17,7 @@ type APIServer struct {
 }
 
 type ApiError struct {
-	Error string
+	Error string `json:"error"`
 }
 
 func NewAPIServer(listenAddr string, store Storage) *APIServer {
@@ -27,7 +30,7 @@ func NewAPIServer(listenAddr string, store Storage) *APIServer {
 func (s *APIServer) Run() {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/api/account", WrapToHandle(s.handle))
+	mux.HandleFunc("/api/accounts", WrapToHandle(s.handle))
 
 	log.Println("Running Server on port: ", s.listenAddr)
 
@@ -37,7 +40,7 @@ func (s *APIServer) Run() {
 func (s *APIServer) handle(w http.ResponseWriter, r *http.Request) error {
 	switch r.Method {
 	case "GET":
-		return s.handleGetAccount(w, r)
+		return s.handleGet(w, r)
 	case "POST":
 		return s.handleCreateAccount(w, r)
 	case "DELETE":
@@ -67,11 +70,52 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	if _, ok := r.URL.Query()["id"]; !ok {
+		id, err := getID(r)
+		if err != nil {
+			return err
+		}
+		err = s.store.DeleteAccount(id)
+		if err != nil {
+			return err
+		}
+		return WriteJSON(w, http.StatusOK, map[string]int{
+			"deleted": id,
+		})
+	}
+	return fmt.Errorf("Missing query parameter 'id'")
 }
 
-func (s *APIServer) handleGetAccount(w http.ResponseWriter, r *http.Request) error {
-	return nil
+func (s *APIServer) handleGet(w http.ResponseWriter, r *http.Request) error {
+	if _, ok := r.URL.Query()["id"]; !ok {
+		id, err := getID(r)
+		if err != nil {
+			return err
+		}
+		return s.handleGetById(w, r, id)
+	}
+	all, ok := r.URL.Query()["all"]
+	if ok && all[0] == "true" {
+		return s.handleGetAll(w, r)
+	}
+	return fmt.Errorf("Invalid query")
+}
+
+func (s *APIServer) handleGetAll(w http.ResponseWriter, r *http.Request) error {
+	accs, err := s.store.GetAccounts()
+	if err != nil {
+		return err
+	}
+
+	return WriteJSON(w, http.StatusOK, accs)
+}
+
+func (s *APIServer) handleGetById(w http.ResponseWriter, r *http.Request, id ...int) error {
+	acc, err := s.store.GetAccountByID(id[0])
+	if err != nil {
+		return err
+	}
+	return WriteJSON(w, http.StatusOK, acc)
 }
 
 func (s *APIServer) handleUpdateAccount(w http.ResponseWriter, r *http.Request) error {
@@ -91,4 +135,13 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	w.WriteHeader(status)
 	w.Header().Add("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(v)
+}
+
+func getID(r *http.Request) (int, error) {
+	idStr := r.URL.Query()["id"]
+	id, err := strconv.Atoi(idStr[0])
+	if err != nil {
+		return id, fmt.Errorf("Invalid id")
+	}
+	return id, nil
 }
