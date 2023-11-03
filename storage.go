@@ -15,7 +15,7 @@ type PsqlStorage struct {
 }
 
 func NewPsqlStorage() (*PsqlStorage, error) {
-	db, err := sql.Open("postgres", "postgres://postgres:p@55w0rdPG!/localhost:3000/?sslmode=disable") //get rid of hardcode and store pg info in .config
+	db, err := sql.Open("postgres", "postgres://postgres:p@55w0rdPG!@localhost:3000/?sslmode=disable") //get rid of hardcode and store pg info in .config
 	if err != nil {
 		return nil, err
 	}

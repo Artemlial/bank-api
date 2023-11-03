@@ -7,6 +7,6 @@ func main() {
 		panic(err)
 	}
 	defer storage.db.Close()
-	apiserver:=NewAPIServer("",storage)
+	apiserver:=NewAPIServer(":8080",storage)
 	apiserver.Run()
 }

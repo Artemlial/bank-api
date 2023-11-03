@@ -48,7 +48,7 @@ func (s *APIServer) handle(w http.ResponseWriter, r *http.Request) error {
 	case "PUT":
 		return s.handleUpdateAccount(w, r)
 	}
-	return fmt.Errorf("Unsupported method: %s", r.Method)
+	return fmt.Errorf("unsupported method: %s", r.Method)
 }
 
 func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
@@ -83,7 +83,7 @@ func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request) 
 			"deleted": id,
 		})
 	}
-	return fmt.Errorf("Missing query parameter 'id'")
+	return fmt.Errorf("missing query parameter 'id'")
 }
 
 func (s *APIServer) handleGet(w http.ResponseWriter, r *http.Request) error {
@@ -98,7 +98,7 @@ func (s *APIServer) handleGet(w http.ResponseWriter, r *http.Request) error {
 	if ok && all[0] == "true" {
 		return s.handleGetAll(w, r)
 	}
-	return fmt.Errorf("Invalid query")
+	return fmt.Errorf("invalid query")
 }
 
 func (s *APIServer) handleGetAll(w http.ResponseWriter, r *http.Request) error {
@@ -141,7 +141,7 @@ func getID(r *http.Request) (int, error) {
 	idStr := r.URL.Query()["id"]
 	id, err := strconv.Atoi(idStr[0])
 	if err != nil {
-		return id, fmt.Errorf("Invalid id")
+		return id, fmt.Errorf("invalid id")
 	}
 	return id, nil
 }
