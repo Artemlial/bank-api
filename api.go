@@ -87,7 +87,7 @@ func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *APIServer) handleGet(w http.ResponseWriter, r *http.Request) error {
-	if _, ok := r.URL.Query()["id"]; !ok {
+	if _, ok := r.URL.Query()["id"]; ok {
 		id, err := getID(r)
 		if err != nil {
 			return err
