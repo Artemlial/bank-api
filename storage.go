@@ -68,7 +68,16 @@ func (p *PsqlStorage) DeleteAccount(id int) error {
 }
 
 func (p *PsqlStorage) UpdateAccount(acc *Account) error {
-	return nil
+	query := fmt.Sprintf(`
+	update Accounts
+	set first_name = %s,
+	set last_name = %s,
+	set balance %.2f
+	where id = %d
+	`, acc.Firstname, acc.Lastname, acc.Balance, acc.ID)
+
+	_, err := p.db.Query(query)
+	return err
 }
 
 func (p *PsqlStorage) GetAccountByID(id int) (*Account, error) {

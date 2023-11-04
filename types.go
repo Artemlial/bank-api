@@ -33,5 +33,28 @@ type Storage interface {
 	UpdateAccount(*Account) error
 	CreateAccount(*Account) error
 	GetAccountByID(int) (*Account, error)
-	GetAccounts()([]*Account,error)
+	GetAccounts() ([]*Account, error)
+}
+
+type TransactionReques struct {
+	DestId int     `json:"dest-id"`
+	Amount float64 `json:"amount"`
+}
+
+type JWTClaims struct {
+	ExpiredAt     int
+	AccountNumber int64
+	UserType      string
+}
+
+func NewJWTClaims(expAt int,accNum int64,userType string) *JWTClaims{
+	return &JWTClaims{
+		ExpiredAt     : expAt,
+		AccountNumber : accNum,
+		UserType      : userType,
+	}
+}
+
+func (j *JWTClaims) Valid() error{
+	return nil
 }

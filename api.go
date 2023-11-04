@@ -6,10 +6,17 @@ import (
 	"log"
 	"net/http"
 
+	"os"
+
 	// "net/url"
 	"strconv"
 	"time"
+
+	// outer
+	jwt "github.com/golang-jwt/jwt/v4"
 )
+
+var jwtKey = []byte(os.Getenv("JWT_SECRET_KEY"))
 
 type APIServer struct {
 	listenAddr string
@@ -31,6 +38,7 @@ func (s *APIServer) Run() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/accounts", WrapToHandle(s.handle))
+	mux.HandleFunc("/api/accounts/id", jwtAuthWrapper(WrapToHandle(s.handleID), s.store))
 
 	log.Println("Running Server on port: ", s.listenAddr)
 
@@ -40,15 +48,27 @@ func (s *APIServer) Run() {
 func (s *APIServer) handle(w http.ResponseWriter, r *http.Request) error {
 	switch r.Method {
 	case "GET":
-		return s.handleGet(w, r)
+		return s.handleGetAll(w, r)
 	case "POST":
 		return s.handleCreateAccount(w, r)
-	case "DELETE":
-		return s.handleDeleteAccount(w, r)
 	case "PUT":
 		return s.handleUpdateAccount(w, r)
 	}
 	return fmt.Errorf("unsupported method: %s", r.Method)
+}
+
+func (s *APIServer) handleID(w http.ResponseWriter, r *http.Request) error {
+	if id, err := getID(r); err == nil {
+		switch r.Method {
+		case "GET":
+			return s.handleGetById(w, r, id)
+		case "DELETE":
+			return s.handleDeleteAccount(w, r, id)
+		default:
+			return fmt.Errorf("unsupported method")
+		}
+	}
+	return fmt.Errorf("missing query parameter 'id'")
 }
 
 func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
@@ -57,6 +77,10 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 	account := NewAccount(acc.Firstname, acc.Lastname)
+	_, err := createJWT(account)
+	if err != nil {
+		return err
+	}
 	if err := s.store.CreateAccount(account); err != nil {
 		return err
 	}
@@ -69,36 +93,14 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request) error {
-	if _, ok := r.URL.Query()["id"]; !ok {
-		id, err := getID(r)
-		if err != nil {
-			return err
-		}
-		err = s.store.DeleteAccount(id)
-		if err != nil {
-			return err
-		}
-		return WriteJSON(w, http.StatusOK, map[string]int{
-			"deleted": id,
-		})
+func (s *APIServer) handleDeleteAccount(w http.ResponseWriter, r *http.Request, id int) error {
+	err := s.store.DeleteAccount(id)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("missing query parameter 'id'")
-}
-
-func (s *APIServer) handleGet(w http.ResponseWriter, r *http.Request) error {
-	if _, ok := r.URL.Query()["id"]; ok {
-		id, err := getID(r)
-		if err != nil {
-			return err
-		}
-		return s.handleGetById(w, r, id)
-	}
-	all, ok := r.URL.Query()["all"]
-	if ok && all[0] == "true" {
-		return s.handleGetAll(w, r)
-	}
-	return fmt.Errorf("invalid query")
+	return WriteJSON(w, http.StatusOK, map[string]int{
+		"deleted": id,
+	})
 }
 
 func (s *APIServer) handleGetAll(w http.ResponseWriter, r *http.Request) error {
@@ -119,10 +121,78 @@ func (s *APIServer) handleGetById(w http.ResponseWriter, r *http.Request, id ...
 }
 
 func (s *APIServer) handleUpdateAccount(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	acc := &Account{}
+	err := json.NewDecoder(r.Body).Decode(acc)
+	if err != nil {
+		return err
+	}
+	r.Body.Close()
+
+	return s.store.UpdateAccount(acc)
 }
 
-func WrapToHandle(f func(http.ResponseWriter, *http.Request) error) func(http.ResponseWriter, *http.Request) {
+// make error methods later
+func jwtAuthWrapper(handlefunc http.HandlerFunc, store Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tokenString := r.Header.Get("Authorization")
+		token, err := validateJWT(tokenString)
+		if err != nil {
+			deny(w)
+			return
+		}
+		if !token.Valid {
+			deny(w)
+			return
+		}
+
+		id, err := getID(r)
+		if err != nil {
+			deny(w)
+			return
+		}
+
+		acc, err := store.GetAccountByID(id)
+		if err != nil {
+			deny(w)
+			return
+		}
+
+		claims, ok := token.Claims.(*JWTClaims)
+
+		if !ok {
+			deny(w)
+			return
+		}
+
+		if acc.Number != claims.AccountNumber {
+			deny(w)
+			return
+		}
+
+		handlefunc(w, r)
+	}
+}
+
+func validateJWT(tokenString string) (*jwt.Token, error) {
+	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return jwtKey, nil
+	})
+}
+
+func createJWT(account *Account) (string, error) {
+	claims := NewJWTClaims(15000, account.Number, "undefined")
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	return token.SignedString(jwtKey)
+}
+
+type apiFunc func(http.ResponseWriter, *http.Request) error
+
+func WrapToHandle(f apiFunc) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := f(w, r)
 		if err != nil {
@@ -138,10 +208,17 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 }
 
 func getID(r *http.Request) (int, error) {
-	idStr := r.URL.Query()["id"]
+	idStr, ok := r.URL.Query()["id"]
+	if !ok {
+		return 0, fmt.Errorf("missing query parameter 'id'")
+	}
 	id, err := strconv.Atoi(idStr[0])
 	if err != nil {
 		return id, fmt.Errorf("invalid id")
 	}
 	return id, nil
+}
+
+func deny(w http.ResponseWriter) {
+	WriteJSON(w, http.StatusForbidden, ApiError{Error: "access denied"})
 }
