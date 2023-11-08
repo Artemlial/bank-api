@@ -1,0 +1,10 @@
+server:
+  host: "localhost"
+  port: ":8080"
+db:
+  name: "postgresql"
+  user: "postgres"
+  pswd: "p@55w0rdPG!"
+  host: "localhost"
+  port: 3000
+jwt_token: "MY_5UP3R_53CR3T_T0K3N"
