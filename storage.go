@@ -14,8 +14,9 @@ type PsqlStorage struct {
 	db *sql.DB
 }
 
-func NewPsqlStorage() (*PsqlStorage, error) {
-	db, err := sql.Open("postgres", "postgres://postgres:p@55w0rdPG!@localhost:3000/?sslmode=disable") //get rid of hardcode and store pg info in .config
+func NewPsqlStorage(host, port, user, pswd string) (*PsqlStorage, error) {
+	uri := fmt.Sprintf("postgres://%s:%s@%s:%s/?sslmode=disable", user, pswd, host, port)
+	db, err := sql.Open("postgres", uri)
 	if err != nil {
 		return nil, err
 	}
@@ -39,19 +40,18 @@ func (p *PsqlStorage) CreateTableAccounts() error {
 		last_name varchar(20),
 		number bigint,
 		balance money,
-		created_at timestamptz);`
+		created_at timestamptz);
+		`
 
 	_, err := p.db.Query(query)
 	return err
 }
 
 func (p *PsqlStorage) CreateAccount(acc *Account) error {
-	query := fmt.Sprintf(`
-	insert into Accounts("first_name","last_name","number","created_at") 
-	values(%s,%s,%d,%v)
-	`, acc.Firstname, acc.Lastname, acc.Number, acc.CreatedAt)
-
-	resp, err := p.db.Exec(query)
+	resp, err := p.db.Exec(`
+	insert into Accounts("first_name","last_name","number","balance","created_at") 
+	values($1,$2,$3,$4,$5)
+	`, acc.Firstname, acc.Lastname, acc.Number, acc.Balance, acc.CreatedAt)
 
 	if err != nil {
 		return err
@@ -63,20 +63,20 @@ func (p *PsqlStorage) CreateAccount(acc *Account) error {
 }
 
 func (p *PsqlStorage) DeleteAccount(id int) error {
-	_, err := p.db.Query("delete from account where id = $1", id)
+	_, err := p.db.Query("delete from Accounts where id = $1", id)
 	return err
 }
 
 func (p *PsqlStorage) UpdateAccount(acc *Account) error {
 	query := fmt.Sprintf(`
 	update Accounts
-	set first_name = %s,
-	set last_name = %s,
-	set balance %.2f
-	where id = %d
+	set first_name = '%s',
+	    last_name = '%s',
+	    balance = '%s'
+	where id = %d;
 	`, acc.Firstname, acc.Lastname, acc.Balance, acc.ID)
-
-	_, err := p.db.Query(query)
+	res, err := p.db.Exec(query)
+	log.Printf("update result %+v", res)
 	return err
 }
 

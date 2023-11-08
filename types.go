@@ -10,7 +10,7 @@ type Account struct {
 	Firstname string    `json:"firstname"`
 	Lastname  string    `json:"lastname"`
 	Number    int64     `json:"number"`
-	Balance   float64   `json:"balance"`
+	Balance   string    `json:"balance"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -47,14 +47,14 @@ type JWTClaims struct {
 	UserType      string
 }
 
-func NewJWTClaims(expAt int,accNum int64,userType string) *JWTClaims{
+func NewJWTClaims(expAt int, accNum int64, userType string) *JWTClaims {
 	return &JWTClaims{
-		ExpiredAt     : expAt,
-		AccountNumber : accNum,
-		UserType      : userType,
+		ExpiredAt:     expAt,
+		AccountNumber: accNum,
+		UserType:      userType,
 	}
 }
 
-func (j *JWTClaims) Valid() error{
+func (j *JWTClaims) Valid() error {
 	return nil
 }

@@ -6,8 +6,6 @@ import (
 	"log"
 	"net/http"
 
-	"os"
-
 	// "net/url"
 	"strconv"
 	"time"
@@ -16,7 +14,7 @@ import (
 	jwt "github.com/golang-jwt/jwt/v4"
 )
 
-var jwtKey = []byte(os.Getenv("JWT_SECRET_KEY"))
+var jwtKey = []byte(cfg.JWT)
 
 type APIServer struct {
 	listenAddr string
@@ -77,7 +75,7 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 	account := NewAccount(acc.Firstname, acc.Lastname)
-	_, err := createJWT(account)
+	token, err := createJWT(account)
 	if err != nil {
 		return err
 	}
@@ -86,9 +84,11 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 	}
 	return WriteJSON(w, http.StatusOK, struct {
 		ID         int
+		AuthToken  string
 		Created_at time.Time
 	}{
 		ID:         account.ID,
+		AuthToken:  token,
 		Created_at: account.CreatedAt,
 	})
 }
@@ -137,17 +137,17 @@ func jwtAuthWrapper(handlefunc http.HandlerFunc, store Storage) http.HandlerFunc
 		tokenString := r.Header.Get("Authorization")
 		token, err := validateJWT(tokenString)
 		if err != nil {
-			deny(w)
+			WriteJSON(w, http.StatusForbidden, ApiError{Error: err.Error()})
 			return
 		}
 		if !token.Valid {
-			deny(w)
+			WriteJSON(w, http.StatusForbidden, ApiError{Error: "invalid token"})
 			return
 		}
 
 		id, err := getID(r)
 		if err != nil {
-			deny(w)
+			WriteJSON(w, http.StatusForbidden, ApiError{Error: err.Error()})
 			return
 		}
 
@@ -160,12 +160,12 @@ func jwtAuthWrapper(handlefunc http.HandlerFunc, store Storage) http.HandlerFunc
 		claims, ok := token.Claims.(*JWTClaims)
 
 		if !ok {
-			deny(w)
+			WriteJSON(w, http.StatusForbidden, ApiError{Error: "cannot convert claims"})
 			return
 		}
 
 		if acc.Number != claims.AccountNumber {
-			deny(w)
+			WriteJSON(w, http.StatusForbidden, ApiError{Error: "problem with acc.Number"})
 			return
 		}
 
@@ -174,7 +174,7 @@ func jwtAuthWrapper(handlefunc http.HandlerFunc, store Storage) http.HandlerFunc
 }
 
 func validateJWT(tokenString string) (*jwt.Token, error) {
-	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+	return jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
