@@ -12,5 +12,5 @@ type Config struct {
 		Host string `yaml:"host"`
 		Port string `yaml:"port"`
 	} `yaml:"db"`
-	JWT string `yaml:"jwt_token"`
+	JWT string `yaml:"jwt_key"`
 }

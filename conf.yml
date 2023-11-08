@@ -7,4 +7,4 @@ db:
   pswd: "p@55w0rdPG!"
   host: "localhost"
   port: 3000
-jwt_token: "MY_5UP3R_53CR3T_T0K3N"
+jwt_key: "MY_5UP3R_53CR3T_K3Y"

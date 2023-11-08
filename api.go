@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 
 	// "net/url"
@@ -38,9 +37,10 @@ func (s *APIServer) Run() {
 	mux.HandleFunc("/api/accounts", WrapToHandle(s.handle))
 	mux.HandleFunc("/api/accounts/id", jwtAuthWrapper(WrapToHandle(s.handleID), s.store))
 
-	log.Println("Running Server on port: ", s.listenAddr)
+	GenLog.Println("Running Server on port: ", s.listenAddr)
 
-	log.Fatal(http.ListenAndServe(s.listenAddr, mux))
+	ErrLog.Println(http.ListenAndServe(s.listenAddr, mux))
+	GenLog.Fatalln("emergency shutdown")
 }
 
 func (s *APIServer) handle(w http.ResponseWriter, r *http.Request) error {
@@ -72,22 +72,22 @@ func (s *APIServer) handleID(w http.ResponseWriter, r *http.Request) error {
 func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
 	acc := new(CreateAccountRequest)
 	if err := json.NewDecoder(r.Body).Decode(acc); err != nil {
-		return err
+		ErrLog.Println(err.Error())
+		return fmt.Errorf("cannot parse json in request body")
 	}
 	account := NewAccount(acc.Firstname, acc.Lastname)
 	token, err := createJWT(account)
 	if err != nil {
+		ErrLog.Println(err.Error())
 		return err
 	}
 	if err := s.store.CreateAccount(account); err != nil {
 		return err
 	}
 	return WriteJSON(w, http.StatusOK, struct {
-		ID         int
 		AuthToken  string
 		Created_at time.Time
 	}{
-		ID:         account.ID,
 		AuthToken:  token,
 		Created_at: account.CreatedAt,
 	})
@@ -137,17 +137,20 @@ func jwtAuthWrapper(handlefunc http.HandlerFunc, store Storage) http.HandlerFunc
 		tokenString := r.Header.Get("Authorization")
 		token, err := validateJWT(tokenString)
 		if err != nil {
-			WriteJSON(w, http.StatusForbidden, ApiError{Error: err.Error()})
+			ErrLog.Println(err.Error())
+			deny(w)
 			return
 		}
 		if !token.Valid {
+			ErrLog.Println(err.Error())
 			WriteJSON(w, http.StatusForbidden, ApiError{Error: "invalid token"})
 			return
 		}
 
 		id, err := getID(r)
 		if err != nil {
-			WriteJSON(w, http.StatusForbidden, ApiError{Error: err.Error()})
+			ErrLog.Println(err.Error())
+			WriteJSON(w, http.StatusForbidden, ApiError{Error: "invalid query"})
 			return
 		}
 
@@ -160,12 +163,14 @@ func jwtAuthWrapper(handlefunc http.HandlerFunc, store Storage) http.HandlerFunc
 		claims, ok := token.Claims.(*JWTClaims)
 
 		if !ok {
-			WriteJSON(w, http.StatusForbidden, ApiError{Error: "cannot convert claims"})
+			ErrLog.Println("token.Claims conversion error")
+			WriteJSON(w, http.StatusInternalServerError, ApiError{Error: "Oopsie ;p"})
 			return
 		}
 
 		if acc.Number != claims.AccountNumber {
-			WriteJSON(w, http.StatusForbidden, ApiError{Error: "problem with acc.Number"})
+			SusLog.Println("api.go::Token Data Does Not Match Any Account!!!!!")
+			deny(w)
 			return
 		}
 
@@ -203,7 +208,7 @@ func WrapToHandle(f apiFunc) func(http.ResponseWriter, *http.Request) {
 
 func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	w.WriteHeader(status)
-	w.Header().Add("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(v)
 }
 
