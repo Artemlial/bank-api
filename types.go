@@ -1,6 +1,8 @@
 package main
 
 import (
+	"io"
+	"log"
 	"math/rand"
 	"time"
 )
@@ -57,4 +59,34 @@ func NewJWTClaims(expAt int, accNum int64, userType string) *JWTClaims {
 
 func (j *JWTClaims) Valid() error {
 	return nil
+}
+
+type MyLogger struct {
+	logger *log.Logger
+}
+
+func GetMyLogger(output io.Writer, flags int) *MyLogger {
+	ml := &MyLogger{}
+	ml.logger = log.New(output, "", flags)
+	return ml
+}
+
+func (l *MyLogger) event(message string) {
+	l.logger.SetPrefix("[EVENT]")
+	l.logger.Println(message)
+}
+
+func (l *MyLogger) susEvent(message string) {
+	l.logger.SetPrefix("[SUS EVENT]")
+	l.logger.Println(message)
+}
+
+func (l *MyLogger) error(message error) {
+	l.logger.SetPrefix("[ERR]")
+	l.logger.Println(message.Error())
+}
+
+func (l *MyLogger) fatal(err error) {
+	l.logger.SetPrefix("[FATAL ERR]")
+	l.logger.Fatalln(err.Error())
 }

@@ -13,8 +13,6 @@ import (
 	jwt "github.com/golang-jwt/jwt/v4"
 )
 
-var jwtKey = []byte(cfg.JWT)
-
 type APIServer struct {
 	listenAddr string
 	store      Storage
@@ -33,14 +31,12 @@ func NewAPIServer(listenAddr string, store Storage) *APIServer {
 
 func (s *APIServer) Run() {
 	mux := http.NewServeMux()
-
 	mux.HandleFunc("/api/accounts", WrapToHandle(s.handle))
 	mux.HandleFunc("/api/accounts/id", jwtAuthWrapper(WrapToHandle(s.handleID), s.store))
 
-	GenLog.Println("Running Server on port: ", s.listenAddr)
+	MyLog.event("starting server on port")
 
-	ErrLog.Println(http.ListenAndServe(s.listenAddr, mux))
-	GenLog.Fatalln("emergency shutdown")
+	MyLog.fatal(http.ListenAndServe(s.listenAddr, mux))
 }
 
 func (s *APIServer) handle(w http.ResponseWriter, r *http.Request) error {
@@ -72,13 +68,13 @@ func (s *APIServer) handleID(w http.ResponseWriter, r *http.Request) error {
 func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
 	acc := new(CreateAccountRequest)
 	if err := json.NewDecoder(r.Body).Decode(acc); err != nil {
-		ErrLog.Println(err.Error())
+		MyLog.error(err)
 		return fmt.Errorf("cannot parse json in request body")
 	}
 	account := NewAccount(acc.Firstname, acc.Lastname)
 	token, err := createJWT(account)
 	if err != nil {
-		ErrLog.Println(err.Error())
+		MyLog.error(err)
 		return err
 	}
 	if err := s.store.CreateAccount(account); err != nil {
@@ -112,8 +108,8 @@ func (s *APIServer) handleGetAll(w http.ResponseWriter, r *http.Request) error {
 	return WriteJSON(w, http.StatusOK, accs)
 }
 
-func (s *APIServer) handleGetById(w http.ResponseWriter, r *http.Request, id ...int) error {
-	acc, err := s.store.GetAccountByID(id[0])
+func (s *APIServer) handleGetById(w http.ResponseWriter, r *http.Request, id int) error {
+	acc, err := s.store.GetAccountByID(id)
 	if err != nil {
 		return err
 	}
@@ -137,19 +133,19 @@ func jwtAuthWrapper(handlefunc http.HandlerFunc, store Storage) http.HandlerFunc
 		tokenString := r.Header.Get("Authorization")
 		token, err := validateJWT(tokenString)
 		if err != nil {
-			ErrLog.Println(err.Error())
+			MyLog.error(err)
 			deny(w)
 			return
 		}
 		if !token.Valid {
-			ErrLog.Println(err.Error())
+			MyLog.error(err)
 			WriteJSON(w, http.StatusForbidden, ApiError{Error: "invalid token"})
 			return
 		}
 
 		id, err := getID(r)
 		if err != nil {
-			ErrLog.Println(err.Error())
+			MyLog.error(err)
 			WriteJSON(w, http.StatusForbidden, ApiError{Error: "invalid query"})
 			return
 		}
@@ -163,13 +159,13 @@ func jwtAuthWrapper(handlefunc http.HandlerFunc, store Storage) http.HandlerFunc
 		claims, ok := token.Claims.(*JWTClaims)
 
 		if !ok {
-			ErrLog.Println("token.Claims conversion error")
+			MyLog.error(fmt.Errorf("token.Claims conversion error"))
 			WriteJSON(w, http.StatusInternalServerError, ApiError{Error: "Oopsie ;p"})
 			return
 		}
 
 		if acc.Number != claims.AccountNumber {
-			SusLog.Println("api.go::Token Data Does Not Match Any Account!!!!!")
+			MyLog.susEvent("api.go::Token Data Does Not Match Any Account!!!!!")
 			deny(w)
 			return
 		}
@@ -183,7 +179,7 @@ func validateJWT(tokenString string) (*jwt.Token, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return jwtKey, nil
+		return []byte(cfg.JWT), nil
 	})
 }
 
@@ -192,7 +188,7 @@ func createJWT(account *Account) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	return token.SignedString(jwtKey)
+	return token.SignedString([]byte(cfg.JWT))
 }
 
 type apiFunc func(http.ResponseWriter, *http.Request) error
@@ -208,7 +204,7 @@ func WrapToHandle(f apiFunc) func(http.ResponseWriter, *http.Request) {
 
 func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	w.WriteHeader(status)
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Add("content-type", "application/json")
 	return json.NewEncoder(w).Encode(v)
 }
 
