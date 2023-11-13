@@ -14,3 +14,4 @@ type Config struct {
 	} `yaml:"db"`
 	JWT string `yaml:"jwt_key"`
 }
+// comment for commit
