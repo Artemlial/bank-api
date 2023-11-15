@@ -31,12 +31,21 @@ func NewAPIServer(listenAddr string, store Storage) *APIServer {
 
 func (s *APIServer) Run() {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/register",WrapToHandle(s.handleReqister()))
 	mux.HandleFunc("/api/accounts", WrapToHandle(s.handle))
 	mux.HandleFunc("/api/accounts/id", jwtAuthWrapper(WrapToHandle(s.handleID), s.store))
 
 	MyLog.event("starting server on port")
 
 	MyLog.fatal(http.ListenAndServe(s.listenAddr, mux))
+}
+
+
+func (s *APIServer) handleRegister(w http.ResponseWriter, r *http.Request) error{
+	if r.Method!="POST"{
+		return fmt.Errorf("method %s not supported",r.Method)
+	}
+	var req *CreateAccountRequest
 }
 
 func (s *APIServer) handle(w http.ResponseWriter, r *http.Request) error {

@@ -25,6 +25,8 @@ func NewAccount(firstname, lastname string) *Account {
 	}
 }
 
+
+
 type CreateAccountRequest struct {
 	Firstname string `json:"firstname"`
 	Lastname  string `json:"lastname"`

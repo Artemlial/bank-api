@@ -8,3 +8,4 @@ db:
   host: "localhost"
   port: 3000
 jwt_key: "MY5UP3R53CR3TK3Y"
+
