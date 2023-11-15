@@ -11,6 +11,7 @@ import (
 
 	// outer
 	jwt "github.com/golang-jwt/jwt/v4"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type APIServer struct {
@@ -31,7 +32,8 @@ func NewAPIServer(listenAddr string, store Storage) *APIServer {
 
 func (s *APIServer) Run() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/register",WrapToHandle(s.handleReqister()))
+	// mux.HandleFunc("/register",WrapToHandle(s.handleRegister))
+	mux.HandleFunc("/login", WrapToHandle(s.handleLogin))
 	mux.HandleFunc("/api/accounts", WrapToHandle(s.handle))
 	mux.HandleFunc("/api/accounts/id", jwtAuthWrapper(WrapToHandle(s.handleID), s.store))
 
@@ -40,12 +42,41 @@ func (s *APIServer) Run() {
 	MyLog.fatal(http.ListenAndServe(s.listenAddr, mux))
 }
 
+// this one's for later
+// func (s *APIServer) handleRegister(w http.ResponseWriter, r *http.Request) error{
+// 	if r.Method!="POST"{
+// 		return fmt.Errorf("method %s not supported",r.Method)
+// 	}
+// 	var req *CreateAccountRequest
+// }
 
-func (s *APIServer) handleRegister(w http.ResponseWriter, r *http.Request) error{
-	if r.Method!="POST"{
-		return fmt.Errorf("method %s not supported",r.Method)
+func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != "POST" {
+		return fmt.Errorf("method %s not supported", r.Method)
 	}
-	var req *CreateAccountRequest
+	req := &LoginRequest{}
+	err := json.NewDecoder(r.Body).Decode(req)
+	if err != nil {
+		MyLog.error(fmt.Errorf("cannot read request Body as JSON: %s", err.Error()))
+		return err
+	}
+	acc, err := s.store.GetAccountByNumber(req.AccountNumber)
+	if err != nil {
+		MyLog.error(err)
+		return fmt.Errorf("cannot verify your credentials")
+	}
+	if acc.Number != req.AccountNumber {
+		deny(w)
+		return nil
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(acc.EncryptedPassword), []byte(req.Password))
+	if err != nil {
+		deny(w)
+		return nil
+	}
+
+	return nil
 }
 
 func (s *APIServer) handle(w http.ResponseWriter, r *http.Request) error {
@@ -80,7 +111,7 @@ func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) 
 		MyLog.error(err)
 		return fmt.Errorf("cannot parse json in request body")
 	}
-	account := NewAccount(acc.Firstname, acc.Lastname)
+	account := NewAccount(acc.Firstname, acc.Lastname, "")
 	token, err := createJWT(account)
 	if err != nil {
 		MyLog.error(err)

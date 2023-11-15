@@ -4,6 +4,8 @@ import (
 	// inner
 	"database/sql"
 	"fmt"
+	"io"
+	"os"
 
 	// outer
 	_ "github.com/lib/pq" //psql driver
@@ -45,33 +47,46 @@ func NewSqlStorage(name, uri string) (*SqlStorage, error) {
 	return psql, nil
 }
 
-func (p *SqlStorage) Init() error {
-	return p.CreateTableAccounts()
+func (p *SqlStorage) Init(flag bool, cfg *Config) error {
+	if !flag {
+		return nil
+	}
+	return p.CreateSchema(cfg)
 }
 
-func (p *SqlStorage) CreateTableAccounts() error {
-	MyLog.event("creating table accounts")
-	query := `create table if not exists Accounts(
-		id serial primary key ,
-		first_name varchar(20),
-		last_name varchar(20),
-		number bigint,
-		balance float8,
-		created_at timestamptz);
-		`
+func (p *SqlStorage) CreateSchema(cfg *Config) error {
+	MyLog.event("Changing schema")
+	err := p.DropAccounts(cfg.DB.PathToScripts)
+	if err != nil {
+		MyLog.error(fmt.Errorf("cannot drop table : %s", err.Error()))
+		return err
+	}
 
-	_, err := p.db.Query(query)
+	query, err := GetScript(cfg.DB.PathToScripts + "up.sql")
+	if err != nil {
+		MyLog.fatal(err)
+	}
+
+	_, err = p.db.Query(query)
 	if err != nil {
 		MyLog.error(err)
 	}
 	return err
 }
 
+func (p *SqlStorage) DropAccounts(path string) error {
+	script, err := GetScript(path + "down.sql")
+	if err != nil {
+		MyLog.fatal(err)
+	}
+	_, err = p.db.Exec(script)
+	return err
+}
+
 func (p *SqlStorage) CreateAccount(acc *Account) error {
 	_, err := p.db.Exec(`
-	insert into Accounts("first_name","last_name","number","balance","created_at") 
-	values($1,$2,$3,$4,$5);
-	`, acc.Firstname, acc.Lastname, acc.Number, acc.Balance, acc.CreatedAt)
+	createAccount($1,$2,$3,$4,$5,$6)
+	`, acc.Firstname, acc.Lastname, acc.Number, acc.EncryptedPassword, acc.Balance, acc.CreatedAt)
 	if err != nil {
 		MyLog.error(err)
 		return fmt.Errorf("internal server error")
@@ -97,18 +112,14 @@ func (p *SqlStorage) DeleteAccount(id int) error {
 
 func (p *SqlStorage) UpdateAccount(acc *Account) error {
 	query := fmt.Sprintf(`
-	update Accounts
-	set first_name = '%s',
-	    last_name = '%s',
-	    balance = %.2f
-	where id = %d;
+	updateAccount(%s,%s,%.2f,%d)
 	`, acc.Firstname, acc.Lastname, acc.Balance, acc.ID)
 	_, err := p.db.Exec(query)
-	MyLog.event(fmt.Sprintf("updated account %+v\n", acc))
 	if err != nil {
 		MyLog.error(err)
 		return fmt.Errorf("internal server error")
 	}
+	MyLog.event(fmt.Sprintf("updated account %+v\n", acc))
 	return nil
 }
 
@@ -124,6 +135,19 @@ func (p *SqlStorage) GetAccountByID(id int) (*Account, error) {
 	}
 	MyLog.event(fmt.Sprintf("fetched account with id %d", id))
 	return nil, fmt.Errorf("Account with id %d not found", id)
+}
+
+func (p *SqlStorage) GetAccountByNumber(number int64) (*Account, error){
+	rows,err:= p.db.Query("SELECT * FROM Accounts WHERE number = $1",number)
+	if err!=nil{
+		return nil,err
+	}
+	acc,err := scanRowsIntoAccount(rows)
+
+	if err!=nil{
+		return nil,err
+	}
+	return acc,nil
 }
 
 func (p *SqlStorage) GetAccounts() ([]*Account, error) {
@@ -156,4 +180,16 @@ func scanRowsIntoAccount(row *sql.Rows) (*Account, error) {
 	err := row.Scan(&d.ID, &d.Firstname, &d.Lastname, &d.Number, &d.Balance, &d.CreatedAt)
 
 	return d, err
+}
+
+func GetScript(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if b, err := io.ReadAll(f); err == nil {
+		return string(b), nil
+	}
+	return "", err
 }

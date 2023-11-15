@@ -8,4 +8,4 @@ require github.com/golang-jwt/jwt/v4 v4.5.0
 
 require gopkg.in/yaml.v2 v2.4.0
 
-require golang.org/x/crypto v0.15.0 // indirect
+require golang.org/x/crypto v0.15.0

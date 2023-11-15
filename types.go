@@ -8,24 +8,29 @@ import (
 )
 
 type Account struct {
-	ID        int       `json:"id"`
-	Firstname string    `json:"firstname"`
-	Lastname  string    `json:"lastname"`
-	Number    int64     `json:"number"`
-	Balance   float64   `json:"balance"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                int       `json:"id"`
+	Firstname         string    `json:"firstname"`
+	Lastname          string    `json:"lastname"`
+	Number            int64     `json:"number"`
+	EncryptedPassword string    `json:"-"`
+	Balance           float64   `json:"balance"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
-func NewAccount(firstname, lastname string) *Account {
+func NewAccount(firstname, lastname, encPasswd string) *Account {
 	return &Account{
-		Firstname: firstname,
-		Lastname:  lastname,
-		Number:    int64(rand.Intn(1000000)),
-		CreatedAt: time.Now().UTC(),
+		Firstname:         firstname,
+		Lastname:          lastname,
+		Number:            int64(rand.Intn(1000000)),
+		EncryptedPassword: encPasswd,
+		CreatedAt:         time.Now().UTC(),
 	}
 }
 
-
+type LoginRequest struct {
+	AccountNumber int64  `json:"number"`
+	Password      string `json:"password"`
+}
 
 type CreateAccountRequest struct {
 	Firstname string `json:"firstname"`
@@ -37,10 +42,11 @@ type Storage interface {
 	UpdateAccount(*Account) error
 	CreateAccount(*Account) error
 	GetAccountByID(int) (*Account, error)
+	GetAccountByNumber(int64) (*Account, error)
 	GetAccounts() ([]*Account, error)
 }
 
-type TransactionReques struct {
+type TransactionRequest struct {
 	DestId int     `json:"dest-id"`
 	Amount float64 `json:"amount"`
 }
